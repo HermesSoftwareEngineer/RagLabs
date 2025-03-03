@@ -2,53 +2,55 @@ from langchain_google_vertexai import ChatVertexAI, VertexAIEmbeddings
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langgraph.graph import StateGraph, START
-from langchain import hub
 from typing_extensions import TypedDict, List
 from langchain_core.documents import Document
+from langchain import hub
+from langgraph.graph import StateGraph, START
+from dotenv import load_dotenv
 
-# Iniciando o llm
+# Carregando as variáveis de ambiente
+load_dotenv()
+
+# Iniciando o LLM
 llm = ChatVertexAI(model_name='gemini-1.5-flash')
 
-# Inicializa o armazenamento vetorial
-embeddings = VertexAIEmbeddings('textembedding-gecko-multilingual@001')
-vector_store = InMemoryVectorStore(embeddings)
+# Iniciando o armazenamento de vetores
+embbedings = VertexAIEmbeddings('textembedding-gecko-multilingual@001')
+vector_store = InMemoryVectorStore(embbedings)
 
-# Carrega os documentos Web
-loader = WebBaseLoader('https://gshow.globo.com/cultura-pop/filmes/oscar/2025/noticia/globo-homenageia-elenco-e-equipe-de-ainda-estou-aqui-em-los-angeles.ghtml')
+# Carregando a página Web
+loader = WebBaseLoader('https://gshow.globo.com/globoplay/noticia/ainda-estou-aqui-registra-melhor-bilheteria-entre-indicados-a-melhor-filme-internacional-do-oscar-veja-numeros.ghtml')
 docs = loader.load()
 
-# Divide o texto em partes menores
-text_splliter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=200)
-all_splits = text_splliter.split_documents(docs)
+# Cortando os documentos em pedaços
+text_splitters = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=200)
+all_splits = text_splitters.split_documents(docs)
 
-# Adiciona os documentos no armazenamento vetorial
+# Adicionando os pedaços ao vector_store (vetorizando os pedaços)
 vector_store.add_documents(all_splits)
 
-# Definição do estado da aplicação
+# Carregando o prompt padrão para RAG
+prompt = hub.pull('rlm/rag-prompt')
+
+# Definindo o estado padrão STATE
 class State(TypedDict):
     question: str
     context: List[Document]
     answer: str
 
-# Definindo o prompt já padronizado
-prompt = hub.pull('rlm/rag-prompt')
-
-# Função para recuperar os documentos relevantes
+# Recuperando os dados
 def retrieve(state: State):
-    state['context'] = vector_store.similarity_search(state['question'])
-    return state
+    retrieved_documents = vector_store.similarity_search(state['question'])
+    return {'context': retrieved_documents}
 
-# Função para gerar a resposta
+# Gerando a resposta
 def generate(state: State):
     docs_content = '\n\n'.join(doc.page_content for doc in state['context'])
-    messages = prompt.invoke(
-        {'question': state['question'],'context': docs_content}
-    )
-    state['answer'] = llm.invoke(messages)
-    return state
-
-# Compilando o fluxo de trabalho
+    messages = prompt.invoke({'question': state['question'], 'context': docs_content})
+    answer = llm.invoke(messages)
+    return {'answer': answer}
+    
+# Compilando e preparando o fluxo de trabalho
 graph_builder = StateGraph(State).add_sequence([retrieve, generate])
 graph_builder.add_edge(START, 'retrieve')
 graph = graph_builder.compile()
