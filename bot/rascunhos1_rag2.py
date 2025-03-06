@@ -30,9 +30,10 @@ all_splits = text_splitters.split_documents(docs)
 # Adicionando diviões ao vector_store
 vector_store.add_documents(all_splits)
 
-# Iniando grafo (fluxo de trabalho)
+# Iniciando grafo (fluxo de trabalho)
 graph_builder = StateGraph(MessagesState)
 
+# Ferramenta de recuperação de dados
 @tool(response_format='content_and_artifact')
 def retrieve(query: str):
     """Recuperando informações relacionadas a consulta"""
@@ -44,12 +45,13 @@ def retrieve(query: str):
 
     return retireved_documents, serialized
 
+# Função para consultar ou respondar
 def query_or_responde(state: MessagesState):
     """Gerar chamada de ferramenta para recuperar ou responder"""
     response = llm.bind_tools([retrieve]).invoke(state['messages'])
     return {'messages': [response]}
 
-# Recuperando dados
+# Formalizando tools como um nó
 tools = ToolNode([retrieve])
 
 # Função que gera a resposta
