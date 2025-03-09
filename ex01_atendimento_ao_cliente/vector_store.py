@@ -8,18 +8,18 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 load_dotenv()
 
 # Iniciando LLM
-llm = ChatVertexAI(model_name='geminit-1.5-flash')
+llm = ChatVertexAI(model_name='gemini-1.5-flash')
 
 # Iniciando o vector_store
 embeddings = VertexAIEmbeddings('textembedding-gecko-multilingual@001')
 vector_store = InMemoryVectorStore(embeddings)
 
 # Carregando o documento
-loader = WebBaseLoader('https://atendimento.lojasrenner.com.br/hc/pt-br')
+loader = WebBaseLoader('https://sitedopastor.com.br/ilustracoes/')
 docs = loader.load()
 
 # Dividindo o documento em partes menores
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=200)
 all_splits = text_splitter.split_documents(docs)
 
 # Adicionando documentos ao vector_store

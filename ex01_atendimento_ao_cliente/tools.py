@@ -3,9 +3,9 @@ from langchain.tools import tool
 
 @tool(response_format='content_and_artifact')
 def buscar_documentacao(query: str):
-    """Buscando respostas da base de dados"""
+    """Função que recupera os dados para contexto"""
     retrieved_documents = vector_store.similarity_search(query, k=2)
-    serialized = (
+    serialized = '\n\n'.join(
         f'Source: {doc.metadata},\nContent: {doc.page_content}'
         for doc in retrieved_documents
     )

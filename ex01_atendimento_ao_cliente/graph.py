@@ -7,30 +7,30 @@ from langgraph.checkpoint.memory import MemorySaver
 
 # Consultar ou responder
 def consultar_ou_responder(state: MessagesState):
-    """Função para definir se consulta ou responde"""
+    """Consulta a documentação ou gera uma resposta direta"""
     response = llm.bind_tools([buscar_documentacao]).invoke(state['messages'])
     return {'messages': response}
 
 # Função para gerar resposta
 def generate(state: MessagesState):
-    """Função para definir se consulta ou responde"""
+    """Gera uma resposta com base no contexto e nas mensagens anteriores"""
     messages_tools = [m for m in reversed(state['messages']) if m.type == 'tool']
-    context = '\n\n'.join(m for m in reversed(messages_tools))
+    context = '\n\n'.join(m.content for m in reversed(messages_tools))
     
     system_message = SystemMessage(
         'Você é um assistente de perguntas da Renner. Acesse o banco de dados (contexto) para lhe auxiliar nas respostas.'
         'Use no máximo 3 frases pare responder. Se você não souber a resposta, basta dizer que não sabe.\n' + context
     )
 
-    conversation_messages = '\n\n'.join(
+    conversation_messages = [
         m for m in state['messages']
         if m.type in ('human', 'ia')
         or (m.type == 'ia' and not m.tool_calls)
-    )
+    ]
 
     prompt = [system_message] + conversation_messages
 
-    return llm.invoke(prompt)
+    return {'messages': llm.invoke(prompt)}
 
 tools = ToolNode([buscar_documentacao])
 
