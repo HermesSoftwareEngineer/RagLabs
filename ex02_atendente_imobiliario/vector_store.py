@@ -16,10 +16,10 @@ vector_store_instrucoes = InMemoryVectorStore(embeddings)
 vector_store_imoveis = InMemoryVectorStore(embeddings)
 
 # Carregando documentos
-loader_instrucoes = TextLoader(r'C:\Users\Hermes\PROJETOS_DEV\RagLabs\ex02_atendente_imobiliario\instrucoes.txt')
+loader_instrucoes = TextLoader(r'C:\Users\Asus\PROJETOS_DEV\RagLabs\ex02_atendente_imobiliario\instrucoes.txt')
 docs_instrucoes = loader_instrucoes.load()
 
-loader_imoveis = UnstructuredExcelLoader(r'C:\Users\Hermes\PROJETOS_DEV\RagLabs\ex02_atendente_imobiliario\dados_imoveis.xlsx')
+loader_imoveis = UnstructuredExcelLoader(r'C:\Users\Asus\PROJETOS_DEV\RagLabs\ex02_atendente_imobiliario\dados_imoveis.xlsx')
 docs_imoveis = loader_imoveis.load()
 
 # Dividindo os documentos
