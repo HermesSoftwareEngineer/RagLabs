@@ -27,7 +27,7 @@ def consultar_ou_responder(state: MessagesState):
 tools = ToolNode([buscar_imoveis, buscar_instrucoes])
 
 # Função para gerar resposta
-def gerar_resposta(state: MessagesState):
+def gerar_resposta(state: MessagesState): 
     """Função para gerar resposta com base no contexto"""
     list_messages_tools = [m for m in reversed(state['messages']) if m.type == 'tool']
     docs_messages_toos = '\n\n'.join(m.content for m in reversed(list_messages_tools))
