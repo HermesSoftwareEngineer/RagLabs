@@ -13,4 +13,4 @@ def chat():
         result = graph.invoke({'messages': message}, config)
         print("Bot:", result['messages'][-1].content)
 
-chat()
+chat() 
