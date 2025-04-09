@@ -1,12 +1,15 @@
 from langchain_google_vertexai import ChatVertexAI
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
+import operator
+from typing_extensions import TypedDict
+from typing import Annotated, List, Tuple
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from typing import Union
 
 llm = ChatVertexAI(model_name="gemini-1.5-flash")
 
 # Definindo o estado
-
-import operator
-from typing_extensions import TypedDict
-from typing import Annotated, List, Tuple
 
 class StatePlan(TypedDict):
     input: str
@@ -25,8 +28,6 @@ class Plan(BaseModel):
 
 # Nó de planejamento
 
-from langchain_core.prompts import ChatPromptTemplate
-
 planner_prompt = ChatPromptTemplate.from_messages(
     [
         (
@@ -44,20 +45,7 @@ planner_prompt = ChatPromptTemplate.from_messages(
 
 planner = planner_prompt | llm.with_structured_output(Plan)
 
-# Testando o planner
-
-planner.invoke(
-    {
-        "messages": [
-            ("user", "Olá imobiliária stylus, tem apartamentos para alugar na varjota (fortaleza-ce)?")
-        ]
-    }
-)
-
-
 # Etapa de replanejamento
-
-from typing import Union
 
 class Response(BaseModel):
     """Responder ao usuário"""
@@ -92,7 +80,7 @@ replanner_prompt = ChatPromptTemplate.from_messages(
         ),
         (
             "placeholder",
-            "{messages}"
+            "{{messages}}"
         )
     ]
 )
@@ -100,8 +88,6 @@ replanner_prompt = ChatPromptTemplate.from_messages(
 replanner = replanner_prompt | llm.with_structured_output(Act)
 
 # elaborando as funções dos nós
-
-from langgraph.graph import END
 
 def execute_step(state: StatePlan):
     plan = state["plan"]
@@ -131,14 +117,7 @@ def plan_step(state: StatePlan):
     }
 
 def replan_steps(state: StatePlan):
-    output = replanner.invoke(
-        {
-            "contents": state,
-            "input": state["input"],
-            "plan": state["plan"],
-            "past_steps": state["past_steps"]
-        }
-    )
+    output = replanner.invoke(state)
     if isinstance(output.action, Response):
         return {"response": output.action.response}
     else:
@@ -151,10 +130,6 @@ def should_end(state: StatePlan):
         return "agent"
     
 # Construindo o gráfico
-
-from langgraph.graph import StateGraph, START
-from langgraph.checkpoint.memory import MemorySaver
-import asyncio
 
 graph_builder = StateGraph(StatePlan)
 
@@ -171,14 +146,3 @@ graph_builder.add_conditional_edges("replan", should_end, ["agent", END])
 
 # Compilando o grafo
 app = graph_builder.compile()
-
-config = {"recursion_limit": 50}
-inputs = {"input": "Olá, Mundo!"}
-
-async def main():
-    async for event in app.astream(inputs, config):
-        for k, v in event.items():
-            if k != "__end__":
-                print(v)
-
-asyncio.run(main())
