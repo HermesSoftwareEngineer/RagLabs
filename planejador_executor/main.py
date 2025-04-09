@@ -2,26 +2,28 @@ from langchain_google_vertexai import ChatVertexAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 import operator
+from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 from typing import Annotated, List, Tuple
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from typing import Union
+from pydantic import BaseModel, Field
+from typing import Literal
 
 llm = ChatVertexAI(model_name="gemini-1.5-flash")
 
 # Definindo o estado
 
 class StatePlan(TypedDict):
+    messages: Annotated[List[str], add_messages]
     input: str
     plan: List[str]
     past_steps: Annotated[List[Tuple], operator.add]
-    response: str
 
 # Estrutura de resposta do LLM para a etapa de planejamento
 
-from pydantic import BaseModel, Field
-
 class Plan(BaseModel):
+    type: Literal["plan"]
     steps: List[str] = Field(
         description="diferentes etapas a seguir, devem estar em ordem de classificação"
     )
@@ -32,9 +34,10 @@ planner_prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "Para o objetivo dado, crie um plano simples passo a passo. \
+            "Você é o Stylus Bot, um atendente imobiliário. Crie um plano simples passo a passo para responder o usuário. \
             Este plano deve envolver tarefas individuais que, se executadas corretamente, produzirão a resposta correta. Não adicione nenhuma etapa supérflua. \
-            O resultado da etapa final deve ser a resposta final. Certifique-se de que cada etapa tenha todas as informações necessárias - não pule etapas"
+            O resultado da etapa final deve ser a resposta final. Certifique-se de que cada etapa tenha todas as informações necessárias - não pule etapas \
+            Responda sempre com o TYPE: plan"
         ),
         (
             "placeholder",
@@ -49,21 +52,22 @@ planner = planner_prompt | llm.with_structured_output(Plan)
 
 class Response(BaseModel):
     """Responder ao usuário"""
-    response: str
+    type: Literal["response"]
+    response: str = Field(
+        description="responder ao usuário logo"
+    )
 
 class Act(BaseModel):
     """Ação a ser executada"""
-
     action: Union[Response, Plan] = Field(
-        description="Ação a ser executada. Se você quiser responder ao usuário, use Response. "
-        "Se você precisar usar mais ferramentas para obter a resposta, use Plan."
+        description="Ação a ser executada. Se quiser responder ao usuário, use Response. Se precisar de mais ferramentas, use Plan."
     )
 
 replanner_prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            """Para o objetivo dado, crie um plano simples passo a passo.
+            """Você é o Stylus Bot, um atendente imobiliário. Crie um plano simples passo a passo para responder o usuário. As vezes o plano é simples, as vezes precisa de mais de um passo. SEJA CLARO NOS PASSOS.
             Este plano deve envolver tarefas individuais que, se executadas corretamente, produzirão a resposta correta. Não adicione etapas supérfluas. 
             O resultado da etapa final deve ser a resposta final. Certifique-se de que cada etapa tenha todas as informações necessárias - não pule etapas.
 
@@ -76,11 +80,13 @@ replanner_prompt = ChatPromptTemplate.from_messages(
             Você atualmente fez as seguintes etapas:
             {past_steps}
 
-            Atualize seu plano adequadamente. Se não forem necessárias mais etapas e você puder retornar ao usuário, responda com isso. Caso contrário, preencha o plano. Adicione apenas etapas ao plano que ainda PRECISAM ser feitas. Não retorne etapas feitas anteriormente como parte do plano."""
+            Atualize seu plano adequadamente. Se não forem necessárias mais etapas e você puder retornar ao usuário, responda com isso. Caso contrário, preencha o plano. Adicione apenas etapas ao plano que ainda PRECISAM ser feitas. Não retorne etapas feitas anteriormente como parte do plano. Se quiser responder logo ao usuário.
+            
+            REPITO, SEJA CLARO NOS PASSOS"""
         ),
         (
             "placeholder",
-            "{{messages}}"
+            "{messages}"
         )
     ]
 )
@@ -90,6 +96,7 @@ replanner = replanner_prompt | llm.with_structured_output(Act)
 # elaborando as funções dos nós
 
 def execute_step(state: StatePlan):
+    print("ETAPA DE EXECUÇÃO DO PLANO")
     plan = state["plan"]
     plan_str = "\n".join(f"{i+1}. {step}" for i, step in enumerate(plan))
     task = plan[0]
@@ -104,10 +111,11 @@ def execute_step(state: StatePlan):
     }
 
 def plan_step(state: StatePlan):
+    print("ETAPA DE PLANEJAMENTO")
     plan = planner.invoke(
         {
             "messages": [
-                {"role": "user", "content": state["input"]}
+                {"role": "user", "content": state["messages"][-1].content}
             ]
         }
     )
@@ -117,13 +125,23 @@ def plan_step(state: StatePlan):
     }
 
 def replan_steps(state: StatePlan):
-    output = replanner.invoke(state)
+    print("ETAPA DE REPLANEJAMENTO")
+    print(f"STATE: {state}")
+    output = replanner.invoke(
+        {
+            "input": state["messages"][-1].content,
+            "past_steps": state["past_steps"],
+            "plan": state["plan"],
+            "messages": state["messages"]
+        }
+    )
     if isinstance(output.action, Response):
-        return {"response": output.action.response}
+        return {"response": output.action.response, "messages": output.action.response}
     else:
-        return {"plan": output.acition.steps}
+        return {"plan": output.action.steps}
     
 def should_end(state: StatePlan):
+    "ETAPA DE CONFERIR SE RESPONDE OU ITERA"
     if "response" in state and state["response"]:
         return END
     else:
