@@ -46,5 +46,5 @@ dict_schema = act_class_to_dict_schema(Act)
 llm = ChatVertexAI(model_name="gemini-1.5-flash")
 agent = llm.with_structured_output(dict_schema)
 
-response = agent.invoke("Olá! Eu sou o Hermes. Comprimente de maneira")
+response = agent.invoke("Olá! Eu sou o Hermes. Comprimente de maneira normal")
 print(response)

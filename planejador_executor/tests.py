@@ -2,7 +2,7 @@ from main import StatePlan, replanner, app
 import asyncio
 
 config = {"recursion_limit": 50}
-inputs = {"messages": "Hahahaha!"}
+inputs = {"messages": "Olá! Tudo bem?"}
 
 async def main():
     async for event in app.astream(inputs, config):

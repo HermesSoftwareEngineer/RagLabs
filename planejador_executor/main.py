@@ -10,6 +10,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from typing import Union
 from pydantic import BaseModel, Field
 from typing import Literal
+from utils import act_class_to_dict_schema
 
 llm = ChatVertexAI(model_name="gemini-1.5-flash")
 
@@ -25,34 +26,31 @@ class StatePlan(TypedDict):
 
 class Response(BaseModel):
     """Responder ao usuário"""
-    type: Literal["response"] = Field(
-        description="Tipo de resposta, deve ser 'response'"
+    type: Literal["ResponderUsuário"] = Field("ResponderUsuário",
+        description="Type of responder"
     )
     response: str = Field(
         description="Responder ao usuário logo"
     )
 
 class Plan(BaseModel):
-    type: Literal["plan"] = Field(
-        description="Tipo de plano, deve ser 'plan'"
+    type: Literal["plan"] = Field("plan",
+        description="Type of plan"
     )
     steps: List[str] = Field(
         description="Diferentes etapas a seguir, devem estar em ordem de classificação"
     )
 
 class Act(BaseModel):
-    """Ação a ser executada"""
-    type: Literal["action"] = Field(
-        description="Tipo de ação, deve ser 'action'"
-    )
     action: Union[Response, Plan] = Field(
-        description="Ação a ser executada. Se quiser responder ao usuário, use Response. Se precisar de mais ferramentas, use Plan."
+        description="Ação a ser executada. Você pode responder ou replanejar.",
+        discriminator="type"
     )
 
-dict_schema_plan = convert_to_openai_function(Plan)
-print(f"dict_schema_plan: {dict_schema_plan}")
+# dict_schema_plan = act_class_to_dict_schema(Plan)
+# print(f"dict_schema_plan: {dict_schema_plan}")
 
-dict_schema_act = convert_to_openai_function(Act)
+dict_schema_act = act_class_to_dict_schema(Act)
 print(f"dict_schema_act: {dict_schema_act}")
 
 # Nó de planejamento
@@ -73,7 +71,7 @@ planner_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-planner = planner_prompt | llm.with_structured_output(dict_schema_plan)
+planner = planner_prompt | llm.with_structured_output(Plan)
 
 # Etapa de replanejamento
 
@@ -136,7 +134,7 @@ def plan_step(state: StatePlan):
     print(f"plan: {plan}")
 
     return {
-        "plan": plan["steps"]
+        "plan": plan.steps
     }
 
 def replan_steps(state: StatePlan):
@@ -150,10 +148,11 @@ def replan_steps(state: StatePlan):
             "messages": state["messages"]
         }
     )
-    if isinstance(output.action, Response):
-        return {"response": output.action.response, "messages": output.action.response}
+    print(f"OUTPUT: {output}")
+    if isinstance(output["action"], Response):
+        return {"response": output["action"].response, "messages": output["action"].response}
     else:
-        return {"plan": output.action.steps}
+        return {"plan": output["action"].steps}
     
 def should_end(state: StatePlan):
     "ETAPA DE CONFERIR SE RESPONDE OU ITERA"
