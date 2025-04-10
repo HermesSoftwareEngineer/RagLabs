@@ -3,6 +3,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 import operator
 from langgraph.graph.message import add_messages
+from langchain_core.utils.function_calling import convert_to_openai_function
 from typing_extensions import TypedDict
 from typing import Annotated, List, Tuple
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -22,11 +23,37 @@ class StatePlan(TypedDict):
 
 # Estrutura de resposta do LLM para a etapa de planejamento
 
-class Plan(BaseModel):
-    type: Literal["plan"]
-    steps: List[str] = Field(
-        description="diferentes etapas a seguir, devem estar em ordem de classificação"
+class Response(BaseModel):
+    """Responder ao usuário"""
+    type: Literal["response"] = Field(
+        description="Tipo de resposta, deve ser 'response'"
     )
+    response: str = Field(
+        description="Responder ao usuário logo"
+    )
+
+class Plan(BaseModel):
+    type: Literal["plan"] = Field(
+        description="Tipo de plano, deve ser 'plan'"
+    )
+    steps: List[str] = Field(
+        description="Diferentes etapas a seguir, devem estar em ordem de classificação"
+    )
+
+class Act(BaseModel):
+    """Ação a ser executada"""
+    type: Literal["action"] = Field(
+        description="Tipo de ação, deve ser 'action'"
+    )
+    action: Union[Response, Plan] = Field(
+        description="Ação a ser executada. Se quiser responder ao usuário, use Response. Se precisar de mais ferramentas, use Plan."
+    )
+
+dict_schema_plan = convert_to_openai_function(Plan)
+print(f"dict_schema_plan: {dict_schema_plan}")
+
+dict_schema_act = convert_to_openai_function(Act)
+print(f"dict_schema_act: {dict_schema_act}")
 
 # Nó de planejamento
 
@@ -46,22 +73,9 @@ planner_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-planner = planner_prompt | llm.with_structured_output(Plan)
+planner = planner_prompt | llm.with_structured_output(dict_schema_plan)
 
 # Etapa de replanejamento
-
-class Response(BaseModel):
-    """Responder ao usuário"""
-    type: Literal["response"]
-    response: str = Field(
-        description="responder ao usuário logo"
-    )
-
-class Act(BaseModel):
-    """Ação a ser executada"""
-    action: Union[Response, Plan] = Field(
-        description="Ação a ser executada. Se quiser responder ao usuário, use Response. Se precisar de mais ferramentas, use Plan."
-    )
 
 replanner_prompt = ChatPromptTemplate.from_messages(
     [
@@ -91,7 +105,7 @@ replanner_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-replanner = replanner_prompt | llm.with_structured_output(Act)
+replanner = replanner_prompt | llm.with_structured_output(dict_schema_act)
 
 # elaborando as funções dos nós
 
@@ -119,9 +133,10 @@ def plan_step(state: StatePlan):
             ]
         }
     )
+    print(f"plan: {plan}")
 
     return {
-        "plan": plan.steps
+        "plan": plan["steps"]
     }
 
 def replan_steps(state: StatePlan):
